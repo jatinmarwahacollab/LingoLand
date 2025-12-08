@@ -55,7 +55,8 @@ export const useGeminiLive = (character: Character) => {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       // 3. Define Session Config & Callbacks
-      const sessionPromise = ai.live.connect({
+      let sessionPromise: Promise<any>;
+      sessionPromise = ai.live.connect({
         model: 'gemini-2.5-flash-native-audio-preview-09-2025',
         config: {
           responseModalities: [Modality.AUDIO],

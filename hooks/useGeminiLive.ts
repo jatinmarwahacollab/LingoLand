@@ -62,8 +62,8 @@ export const useGeminiLive = (character: Character) => {
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: character.voiceName } }
           },
-          // Pass system instruction as a simple string, not an object
-          systemInstruction: character.systemPrompt,
+          // Pass system instruction as a structured Content object
+          systemInstruction: { parts: [{ text: character.systemPrompt }] },
         },
         callbacks: {
           onopen: async () => {

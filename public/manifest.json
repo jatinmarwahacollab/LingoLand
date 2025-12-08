@@ -1,0 +1,21 @@
+{
+  "short_name": "LingoLand",
+  "name": "LingoLand English Tutor",
+  "icons": [
+    {
+      "src": "https://www.gstatic.com/lamda/images/sparkle_resting_v2_darkmode_2bdb7df2724e450073ede.gif",
+      "sizes": "192x192",
+      "type": "image/gif"
+    },
+    {
+      "src": "https://www.gstatic.com/lamda/images/sparkle_resting_v2_darkmode_2bdb7df2724e450073ede.gif",
+      "sizes": "512x512",
+      "type": "image/gif"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#e0e7ff",
+  "background_color": "#e0e7ff",
+  "orientation": "portrait"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "LingoLand",
+  "description": "A magical conversational English tutor for kids powered by Gemini Live API.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

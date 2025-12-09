@@ -64,8 +64,8 @@ const App: React.FC = () => {
             </div>
           </div>
           
-          <h1 className="text-4xl font-bold text-indigo-600 mb-2">Welcome to LingoLand!</h1>
-          <p className="text-gray-500 text-lg mb-8">Choose your magical friend to practice English with.</p>
+          <h1 className="text-4xl font-bold text-indigo-600 mb-2">Hi Anusha!</h1>
+          <p className="text-gray-500 text-lg mb-8">Who do you want to talk to today?</p>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
             {CHARACTERS.map((char) => (
@@ -97,7 +97,7 @@ const App: React.FC = () => {
             className="w-full md:w-auto px-12 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full text-2xl font-bold shadow-lg transition-transform transform hover:scale-105 flex items-center justify-center gap-3"
           >
             <Mic className="w-8 h-8" />
-            Start Talking
+            Call My Friend!
           </button>
         </div>
       </div>
@@ -124,7 +124,7 @@ const App: React.FC = () => {
             onClick={handleStop}
             className="bg-red-100 hover:bg-red-200 text-red-600 px-4 py-2 rounded-full font-semibold transition-colors flex items-center gap-2"
           >
-            <MicOff className="w-4 h-4" /> End Chat
+            <MicOff className="w-4 h-4" /> Say Bye Bye
           </button>
         </div>
       </header>
@@ -142,7 +142,7 @@ const App: React.FC = () => {
               </span>
             ) : (
               <span className="flex items-center gap-2">
-                 Listening to you...
+                 Listening to Anusha...
               </span>
             )}
           </div>
@@ -171,7 +171,7 @@ const App: React.FC = () => {
           <div className="bg-white rounded-3xl p-5 shadow-sm border border-indigo-50 flex flex-col">
             <h3 className="font-bold text-gray-700 flex items-center gap-2 mb-3">
               <Star className="w-5 h-5 text-yellow-500 fill-current" />
-              Ideas to say...
+              What can I say?
             </h3>
             <div className="flex-1 overflow-y-auto space-y-2 pr-2">
                {TOPICS.map((topic, idx) => (
@@ -190,7 +190,7 @@ const App: React.FC = () => {
             </h3>
             <div ref={transcriptRef} className="flex-1 overflow-y-auto space-y-3 pr-2 scroll-smooth">
                {transcripts.length === 0 ? (
-                 <p className="text-gray-400 text-center italic mt-10">Start talking to see text here...</p>
+                 <p className="text-gray-400 text-center italic mt-10">Say "Hello!" to start...</p>
                ) : (
                  transcripts.map((t, i) => (
                    <div key={i} className={`flex ${t.role === 'user' ? 'justify-end' : 'justify-start'}`}>

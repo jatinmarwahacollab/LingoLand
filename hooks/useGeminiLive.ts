@@ -47,6 +47,14 @@ export const useGeminiLive = (character: Character) => {
       inputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
 
+      // Mobile Safari fix: Resume context if suspended
+      if (inputAudioContextRef.current.state === 'suspended') {
+        await inputAudioContextRef.current.resume();
+      }
+      if (outputAudioContextRef.current.state === 'suspended') {
+        await outputAudioContextRef.current.resume();
+      }
+
       // 2. Gemini Setup
       const ai = new GoogleGenAI({ apiKey });
       
@@ -78,7 +86,10 @@ export const useGeminiLive = (character: Character) => {
             const ctx = inputAudioContextRef.current!;
             const source = ctx.createMediaStreamSource(stream);
             sourceRef.current = source;
-            const processor = ctx.createScriptProcessor(4096, 1, 1);
+            
+            // LATENCY FIX: Reduced buffer size from 4096 to 2048
+            // 2048 samples @ 16kHz = ~128ms latency (vs 256ms before)
+            const processor = ctx.createScriptProcessor(2048, 1, 1);
             processorRef.current = processor;
 
             processor.onaudioprocess = (e) => {

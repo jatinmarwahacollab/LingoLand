@@ -103,8 +103,8 @@ export const useGeminiLive = (character: Character) => {
             const source = ctx.createMediaStreamSource(stream);
             sourceRef.current = source;
             
-            // Buffer size 2048 (~128ms) for balance between latency and stability
-            const processor = ctx.createScriptProcessor(2048, 1, 1);
+            // Buffer size 512 (~32ms) for low latency response
+            const processor = ctx.createScriptProcessor(512, 1, 1);
             processorRef.current = processor;
 
             processor.onaudioprocess = (e) => {
@@ -117,18 +117,10 @@ export const useGeminiLive = (character: Character) => {
               setVolume(Math.min(100, rms * 500)); 
 
               // 2. Local Barge-In (Interruption) Logic
-              // If model is speaking AND user is loud enough for consecutive frames
+              // If model is speaking AND user is loud enough, interrupt immediately
               if (isModelSpeakingRef.current && rms > 0.02) {
-                 userSpeechCounterRef.current += 1;
-                 // If user talks for ~250ms (2 frames), cut the model
-                 if (userSpeechCounterRef.current >= 2) {
-                     console.log("Local Barge-In Triggered");
-                     stopAudioPlayback();
-                     userSpeechCounterRef.current = 0;
-                 }
-              } else {
-                 // Reset counter if silence
-                 userSpeechCounterRef.current = 0;
+                 console.log("Local Barge-In Triggered");
+                 stopAudioPlayback();
               }
 
               // 3. Send Audio to Gemini

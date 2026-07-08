@@ -117,10 +117,9 @@ export const useGeminiLive = (character: Character) => {
               setVolume(Math.min(100, rms * 500)); 
 
               // 2. Local Barge-In (Interruption) Logic
-              // If model is speaking AND user is loud enough (higher threshold to avoid background noise)
-              if (isModelSpeakingRef.current && rms > 0.05) {
+              // Use a slightly higher threshold and a short hold-off to ignore feedback spikes while staying responsive.
+              if (isModelSpeakingRef.current && rms > 0.08) {
                  userSpeechCounterRef.current += 1;
-                 // Require 1 frame to still be responsive but filter noise
                  if (userSpeechCounterRef.current >= 1) {
                      console.log("Local Barge-In Triggered");
                      stopAudioPlayback();

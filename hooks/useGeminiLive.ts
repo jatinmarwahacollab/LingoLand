@@ -107,8 +107,8 @@ export const useGeminiLive = (character: Character) => {
             const source = ctx.createMediaStreamSource(stream);
             sourceRef.current = source;
             
-            // Buffer size 1024 (~64ms) for responsive yet stable processing
-            const processor = ctx.createScriptProcessor(512, 1, 1);
+            // Buffer size 2048 (~128ms) for more stable voice activity detection
+            const processor = ctx.createScriptProcessor(2048, 1, 1);
             processorRef.current = processor;
 
             processor.onaudioprocess = (e) => {
@@ -125,9 +125,9 @@ export const useGeminiLive = (character: Character) => {
 
               // 2. Voice activity gate: require a short speech burst before turning on,
               //    and wait for longer silence before turning off.
-              const speechThreshold = 0.10;
-              const minSpeechFrames = 4;
-              const silenceFramesToEnd = 16;
+              const speechThreshold = 0.14;
+              const minSpeechFrames = 6;
+              const silenceFramesToEnd = 20;
               const isSpeechDetected = smoothedRms > speechThreshold;
 
               if (isSpeechDetected) {

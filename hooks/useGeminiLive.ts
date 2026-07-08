@@ -23,6 +23,7 @@ export const useGeminiLive = (character: Character) => {
   const voiceActiveRef = useRef(false);
   const silenceFramesRef = useRef(0);
   const smoothedRmsRef = useRef(0);
+  const speechBurstFramesRef = useRef(0);
   
   const sessionRef = useRef<any>(null);
 
@@ -122,37 +123,46 @@ export const useGeminiLive = (character: Character) => {
               const smoothedRms = smoothedRmsRef.current;
               setVolume(Math.min(100, smoothedRms * 500)); 
 
-              // 2. Voice activity gate: only send audio when real speech is detected.
-              const speechThreshold = 0.09;
+              // 2. Voice activity gate: require a short speech burst before turning on,
+              //    and wait for longer silence before turning off.
+              const speechThreshold = 0.10;
+              const minSpeechFrames = 4;
+              const silenceFramesToEnd = 16;
               const isSpeechDetected = smoothedRms > speechThreshold;
 
               if (isSpeechDetected) {
                 silenceFramesRef.current = 0;
-                if (!voiceActiveRef.current) {
+                speechBurstFramesRef.current += 1;
+
+                if (!voiceActiveRef.current && speechBurstFramesRef.current >= minSpeechFrames) {
                   voiceActiveRef.current = true;
                   console.log("Voice activity started");
                 }
 
-                // 3. Local Barge-In (Interruption) Logic
-                if (isModelSpeakingRef.current) {
-                  userSpeechCounterRef.current += 1;
-                  if (userSpeechCounterRef.current >= 1) {
-                    console.log("Local Barge-In Triggered");
-                    stopAudioPlayback();
-                    userSpeechCounterRef.current = 0;
+                // Only send audio once we have a stable speech burst.
+                if (voiceActiveRef.current) {
+                  // 3. Local Barge-In (Interruption) Logic
+                  if (isModelSpeakingRef.current) {
+                    userSpeechCounterRef.current += 1;
+                    if (userSpeechCounterRef.current >= 1) {
+                      console.log("Local Barge-In Triggered");
+                      stopAudioPlayback();
+                      userSpeechCounterRef.current = 0;
+                    }
                   }
-                }
 
-                // 4. Send Audio to Gemini
-                const pcmBlob = createPcmBlob(inputData, 16000);
-                sessionPromise.then(session => {
-                  session.sendRealtimeInput({ media: pcmBlob });
-                });
+                  // 4. Send Audio to Gemini
+                  const pcmBlob = createPcmBlob(inputData, 16000);
+                  sessionPromise.then(session => {
+                    session.sendRealtimeInput({ media: pcmBlob });
+                  });
+                }
               } else {
                 userSpeechCounterRef.current = 0;
+                speechBurstFramesRef.current = 0;
                 silenceFramesRef.current += 1;
 
-                if (voiceActiveRef.current && silenceFramesRef.current >= 8) {
+                if (voiceActiveRef.current && silenceFramesRef.current >= silenceFramesToEnd) {
                   voiceActiveRef.current = false;
                   console.log("Voice activity ended");
                 }

@@ -71,7 +71,7 @@ const App: React.FC = () => {
             {CHARACTERS.map((char) => (
               <button
                 key={char.id}
-                onClick={() => setSelectedChar(char)}
+                onClick={() => handleCharacterSelect(char)}
                 className={`relative p-6 rounded-2xl transition-all duration-300 transform hover:scale-105 ${
                   selectedChar.id === char.id 
                     ? `bg-gradient-to-br ${char.color} shadow-lg ring-4 ring-offset-2 ring-indigo-300 text-white` 

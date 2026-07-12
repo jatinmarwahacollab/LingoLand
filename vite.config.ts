@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     define: {
       // This exposes process.env.API_KEY to the source code by replacing it at build time
-      'process.env.API_KEY': JSON.stringify(env.API_KEY),
+      'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY || env.API_KEY),
     },
   }
 })

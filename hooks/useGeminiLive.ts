@@ -1,73 +1,53 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { Character, TranscriptItem } from '../types';
-import { downsampleBuffer, createPcmBlob, base64DecodeToUint8Array, decodeAudioData } from '../utils/audioUtils';
+import { downsampleBuffer, createPcmBlob, base64DecodeToUint8Array, pcm16ToFloat32 } from '../utils/audioUtils';
 
-const TARGET_SAMPLE_RATE = 16000; // What Gemini expects for input
-const IDLE_TIMEOUT_MS = 45_000;   // 45 seconds of total silence → auto-disconnect
+const TARGET_SAMPLE_RATE = 16000; // Gemini input rate
+const IDLE_TIMEOUT_MS = 45_000;   // 45s of total silence -> disconnect
 
-/**
- * Gemini Live–style hook.
- *
- * • Capture mic at browser's native sample rate, downsample to 16kHz.
- * • Stream ALL audio continuously — server-side VAD handles everything.
- * • Obey server `interrupted` signals for barge-in.
- * • Auto-disconnect after prolonged silence (like Gemini Live does).
- */
 export const useGeminiLive = (character: Character) => {
   const [isActive, setIsActive] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [volume, setVolume] = useState(0);
   const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);
+  const [liveInputText, setLiveInputText] = useState('');
+  const [liveOutputText, setLiveOutputText] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  // Audio refs
+  // Audio Contexts & Worklets
   const inputAudioContextRef = useRef<AudioContext | null>(null);
   const outputAudioContextRef = useRef<AudioContext | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  
+  const recorderWorkletRef = useRef<AudioWorkletNode | null>(null);
+  const playbackWorkletRef = useRef<AudioWorkletNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
 
-  // Playback scheduling
-  const nextStartTimeRef = useRef<number>(0);
-  const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
-  const isModelSpeakingRef = useRef(false);
-
-  // Volume (purely for UI)
+  // Volume UI
   const smoothedRmsRef = useRef(0);
   const volumeThrottleRef = useRef(0);
 
   // Session
   const sessionRef = useRef<any>(null);
 
-  // Transcript accumulation
+  // Transcripts
   const currentInputTransRef = useRef('');
   const currentOutputTransRef = useRef('');
 
-  // Idle timeout — tracks last activity (user speech or model response)
+  // Idle Timer
   const lastActivityRef = useRef<number>(Date.now());
   const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ─── Stop playback (server-driven interruption) ───
+  // Clear playback queue completely when interrupted
   const stopAudioPlayback = useCallback(() => {
-    activeSourcesRef.current.forEach(source => {
-      try { source.stop(); } catch (_e) { /* already stopped */ }
-    });
-    activeSourcesRef.current.clear();
-
-    if (outputAudioContextRef.current) {
-      nextStartTimeRef.current = outputAudioContextRef.current.currentTime;
-    } else {
-      nextStartTimeRef.current = 0;
+    if (playbackWorkletRef.current) {
+      playbackWorkletRef.current.port.postMessage('clear');
     }
-
     setIsSpeaking(false);
-    isModelSpeakingRef.current = false;
   }, []);
 
-  // ─── Disconnect ───
   const disconnect = useCallback(() => {
-    // Clear idle timer
     if (idleTimerRef.current) {
       clearInterval(idleTimerRef.current);
       idleTimerRef.current = null;
@@ -77,19 +57,27 @@ export const useGeminiLive = (character: Character) => {
       mediaStreamRef.current.getTracks().forEach(track => track.stop());
       mediaStreamRef.current = null;
     }
-    if (processorRef.current) {
-      processorRef.current.disconnect();
-      processorRef.current = null;
+    
+    if (recorderWorkletRef.current) {
+      recorderWorkletRef.current.disconnect();
+      recorderWorkletRef.current = null;
     }
+
     if (sourceRef.current) {
       sourceRef.current.disconnect();
       sourceRef.current = null;
     }
+
     if (inputAudioContextRef.current) {
       inputAudioContextRef.current.close();
       inputAudioContextRef.current = null;
     }
-    stopAudioPlayback();
+    
+    if (playbackWorkletRef.current) {
+      playbackWorkletRef.current.disconnect();
+      playbackWorkletRef.current = null;
+    }
+
     if (outputAudioContextRef.current) {
       outputAudioContextRef.current.close();
       outputAudioContextRef.current = null;
@@ -99,13 +87,13 @@ export const useGeminiLive = (character: Character) => {
 
     setIsActive(false);
     setIsSpeaking(false);
-    isModelSpeakingRef.current = false;
     setVolume(0);
+    setLiveInputText('');
+    setLiveOutputText('');
     currentInputTransRef.current = '';
     currentOutputTransRef.current = '';
-  }, [stopAudioPlayback]);
+  }, []);
 
-  // ─── Connect ───
   const connect = useCallback(async () => {
     try {
       setError(null);
@@ -117,8 +105,9 @@ export const useGeminiLive = (character: Character) => {
         throw new Error("API Key is missing. Please check your settings.");
       }
 
-      // 1. Audio contexts — use browser's NATIVE sample rate for input
+      // --- 1. Audio Setup with AudioWorklet ---
       inputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({
+        sampleRate: 16000,
         latencyHint: 'interactive',
       });
       outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({
@@ -126,7 +115,7 @@ export const useGeminiLive = (character: Character) => {
         latencyHint: 'interactive',
       });
 
-      // Mobile Safari fix
+      // Mobile Safari context resume
       if (inputAudioContextRef.current.state === 'suspended') {
         await inputAudioContextRef.current.resume();
       }
@@ -134,15 +123,19 @@ export const useGeminiLive = (character: Character) => {
         await outputAudioContextRef.current.resume();
       }
 
+      // Load Worklets
+      await inputAudioContextRef.current.audioWorklet.addModule('/audio-recorder.worklet.js');
+      await outputAudioContextRef.current.audioWorklet.addModule('/audio-playback.worklet.js');
+
       const nativeSampleRate = inputAudioContextRef.current.sampleRate;
-      console.log(`Mic native sample rate: ${nativeSampleRate} Hz → downsampling to ${TARGET_SAMPLE_RATE} Hz`);
+      
+      // Setup Playback Pipeline
+      playbackWorkletRef.current = new AudioWorkletNode(outputAudioContextRef.current, 'audio-playback-worklet');
+      playbackWorkletRef.current.connect(outputAudioContextRef.current.destination);
 
-      // 2. Gemini Live config (sent ONCE during WebSocket setup)
+      // --- 2. Gemini Live Config ---
       const ai = new GoogleGenAI({ apiKey });
-
       const config = {
-        // Reverting to the preview model as the newer 'gemini-live-2.5-flash-native-audio'
-        // name was rejected by the API backend, causing the immediate websocket close.
         model: 'gemini-2.5-flash-native-audio-preview-12-2025',
         config: {
           responseModalities: [Modality.AUDIO],
@@ -153,23 +146,13 @@ export const useGeminiLive = (character: Character) => {
             parts: [{ text: character.systemPrompt }],
           },
           inputAudioTranscription: {},
-          outputAudioTranscription: {},
-          
-          // CRITICAL: Tune server-side VAD (Voice Activity Detection)
-          // By default, the model waits too long before deciding you've finished speaking.
-          // This makes it respond much faster and feels more natural.
-          realtimeInputConfig: {
-            automaticActivityDetection: {
-              endOfSpeechSensitivity: 'END_SENSITIVITY_HIGH',
-              silenceDurationMs: 400 // Reacts after 400ms of silence
-            }
-          }
+          outputAudioTranscription: {}
         },
       };
 
       let sessionPromise: Promise<any>;
 
-      // 3. Start idle timer — auto-disconnect after silence
+      // --- 3. Start Idle Timer ---
       lastActivityRef.current = Date.now();
       idleTimerRef.current = setInterval(() => {
         const elapsed = Date.now() - lastActivityRef.current;
@@ -179,16 +162,21 @@ export const useGeminiLive = (character: Character) => {
         }
       }, 5000);
 
+      // --- 4. WebSocket Callbacks ---
       const callbacks = {
         onopen: async () => {
           console.log('Session Opened');
 
           try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            // CRITICAL: Enforce strict hardware/software echo cancellation!
+            const stream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+              }
+            });
             
-            // If the connection was abruptly closed or model rejected, disconnect()
-            // would have run, setting inputAudioContextRef to null. We must check this 
-            // before trying to use it!
             const ctx = inputAudioContextRef.current;
             if (!ctx) {
                console.warn("Session was aborted before mic was initialized.");
@@ -200,16 +188,17 @@ export const useGeminiLive = (character: Character) => {
             const source = ctx.createMediaStreamSource(stream);
             sourceRef.current = source;
 
-            const processor = ctx.createScriptProcessor(2048, 1, 1);
-            processorRef.current = processor;
+            // Setup Recording Worklet
+            const recorder = new AudioWorkletNode(ctx, 'audio-recorder-worklet');
+            recorderWorkletRef.current = recorder;
 
-            processor.onaudioprocess = (e) => {
-              const rawData = e.inputBuffer.getChannelData(0);
+            recorder.port.onmessage = (e) => {
+              const rawData = e.data; // Float32Array from Worklet
 
-              // Downsample from native rate to 16kHz
+              // Downsample
               const downsampled = downsampleBuffer(rawData, nativeSampleRate, TARGET_SAMPLE_RATE);
 
-              // Volume for visualizer (throttled to ~8fps)
+              // Volume UI
               volumeThrottleRef.current++;
               if (volumeThrottleRef.current % 3 === 0) {
                 let sum = 0;
@@ -219,17 +208,14 @@ export const useGeminiLive = (character: Character) => {
                 setVolume(Math.min(100, smoothedRmsRef.current * 500));
               }
 
-              // Stream to Gemini
-              const pcmBlob = createPcmBlob(downsampled, TARGET_SAMPLE_RATE);
-              sessionPromise.then(session => {
-                if (sessionRef.current) {
-                  session.sendRealtimeInput({ media: pcmBlob });
-                }
-              });
+              if (sessionRef.current) {
+                const pcmBlob = createPcmBlob(downsampled, TARGET_SAMPLE_RATE);
+                sessionRef.current.sendRealtimeInput({ media: pcmBlob });
+              }
             };
 
-            source.connect(processor);
-            processor.connect(ctx.destination);
+            source.connect(recorder);
+            // DO NOT connect recorder to destination, otherwise mic feeds back into speakers!
           } catch (err) {
             console.error('Mic Error:', err);
             setError('Could not access microphone.');
@@ -237,62 +223,61 @@ export const useGeminiLive = (character: Character) => {
           }
         },
 
-        onmessage: async (message: LiveServerMessage) => {
-          // Server-driven interruption
+        onmessage: (message: LiveServerMessage) => {
+          // Server-driven interruption (Barge-in)
           if (message.serverContent?.interrupted) {
             stopAudioPlayback();
             return;
           }
 
-          // Audio playback
+          // Audio playback routing to Worklet
           const audioData = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-          if (audioData && outputAudioContextRef.current) {
-            // Reset idle timer — model is responding
+          if (audioData && playbackWorkletRef.current) {
             lastActivityRef.current = Date.now();
+            setIsSpeaking(true); // Can be improved with an event from the worklet later
 
-            setIsSpeaking(true);
-            isModelSpeakingRef.current = true;
-
-            const ctx = outputAudioContextRef.current;
-            nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);
-
+            // Decode base64 to PCM Float32Array instantly on main thread
             const rawBytes = base64DecodeToUint8Array(audioData);
-            const audioBuffer = await decodeAudioData(rawBytes, ctx, 24000);
-
-            const source = ctx.createBufferSource();
-            source.buffer = audioBuffer;
-            source.connect(ctx.destination);
-
-            source.onended = () => {
-              activeSourcesRef.current.delete(source);
-              if (activeSourcesRef.current.size === 0) {
-                setIsSpeaking(false);
-                isModelSpeakingRef.current = false;
-              }
-            };
-
-            source.start(nextStartTimeRef.current);
-            activeSourcesRef.current.add(source);
-            nextStartTimeRef.current += audioBuffer.duration;
+            const float32Data = pcm16ToFloat32(rawBytes);
+            
+            // Queue into Worklet for gapless playback
+            playbackWorkletRef.current.port.postMessage(float32Data);
+            
+            // Note: Since the worklet handles the buffering now, we don't have perfect
+            // UI sync for `isSpeaking=false` automatically. We can just rely on the stream.
+            // But to keep it simple, we use a timeout based on byte length.
+            const audioDurationMs = (float32Data.length / 24000) * 1000;
+            setTimeout(() => {
+                // Heuristic: If we haven't received audio recently, turn off speaking flag.
+                if (Date.now() - lastActivityRef.current >= audioDurationMs - 50) {
+                   setIsSpeaking(false);
+                }
+            }, audioDurationMs);
           }
 
-          // Transcriptions — reset idle timer on user speech too
+          // Transcriptions
           const outTrans = message.serverContent?.outputTranscription?.text;
           const inTrans = message.serverContent?.inputTranscription?.text;
-          if (outTrans) currentOutputTransRef.current += outTrans;
+          if (outTrans) {
+            currentOutputTransRef.current += outTrans;
+            setLiveOutputText(currentOutputTransRef.current);
+          }
           if (inTrans) {
             currentInputTransRef.current += inTrans;
-            lastActivityRef.current = Date.now(); // User is speaking
+            setLiveInputText(currentInputTransRef.current);
+            lastActivityRef.current = Date.now();
           }
 
           if (message.serverContent?.turnComplete) {
             if (currentInputTransRef.current.trim()) {
               setTranscripts(prev => [...prev, { role: 'user', text: currentInputTransRef.current.trim() }]);
               currentInputTransRef.current = '';
+              setLiveInputText('');
             }
             if (currentOutputTransRef.current.trim()) {
               setTranscripts(prev => [...prev, { role: 'model', text: currentOutputTransRef.current.trim() }]);
               currentOutputTransRef.current = '';
+              setLiveOutputText('');
             }
           }
         },
@@ -308,7 +293,7 @@ export const useGeminiLive = (character: Character) => {
         },
       };
 
-      // 4. Open WebSocket
+      // Connect WebSocket
       sessionPromise = ai.live.connect({ ...config, callbacks });
       const session = await sessionPromise;
       sessionRef.current = session;
@@ -319,10 +304,9 @@ export const useGeminiLive = (character: Character) => {
     }
   }, [character, stopAudioPlayback, disconnect]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => { disconnect(); };
   }, [disconnect]);
 
-  return { connect, disconnect, isActive, isSpeaking, volume, transcripts, error };
+  return { connect, disconnect, isActive, isSpeaking, volume, transcripts, liveInputText, liveOutputText, error };
 };

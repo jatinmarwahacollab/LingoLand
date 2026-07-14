@@ -14,9 +14,11 @@ const App: React.FC = () => {
     connect, 
     disconnect, 
     isActive, 
-    isSpeaking, 
+    isSpeaking,
     volume,
     transcripts,
+    liveInputText,
+    liveOutputText,
     error 
   } = useGeminiLive(selectedChar);
 
@@ -203,6 +205,22 @@ const App: React.FC = () => {
                      </div>
                    </div>
                  ))
+               )}
+               {/* Live User Transcript */}
+               {liveInputText && (
+                 <div className="flex justify-end">
+                   <div className="max-w-[85%] px-4 py-2 rounded-2xl text-sm bg-indigo-400 text-white rounded-tr-none opacity-80 animate-pulse">
+                     {liveInputText}
+                   </div>
+                 </div>
+               )}
+               {/* Live Model Transcript */}
+               {liveOutputText && (
+                 <div className="flex justify-start">
+                   <div className="max-w-[85%] px-4 py-2 rounded-2xl text-sm bg-gray-100 text-gray-800 rounded-tl-none opacity-80">
+                     {liveOutputText}
+                   </div>
+                 </div>
                )}
             </div>
           </div>

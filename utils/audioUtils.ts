@@ -93,3 +93,13 @@ export async function decodeAudioData(
   }
   return buffer;
 }
+
+// Convert Int16Array raw bytes to Float32Array (for AudioWorklet playback)
+export function pcm16ToFloat32(data: Uint8Array): Float32Array {
+  const dataInt16 = new Int16Array(data.buffer);
+  const float32 = new Float32Array(dataInt16.length);
+  for (let i = 0; i < dataInt16.length; i++) {
+    float32[i] = dataInt16[i] / 32768.0;
+  }
+  return float32;
+}

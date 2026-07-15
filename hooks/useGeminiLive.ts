@@ -10,9 +10,6 @@ export const useGeminiLive = (character: Character) => {
   const [isActive, setIsActive] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [volume, setVolume] = useState(0);
-  const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);
-  const [liveInputText, setLiveInputText] = useState('');
-  const [liveOutputText, setLiveOutputText] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   // Audio Contexts & Worklets
@@ -31,12 +28,11 @@ export const useGeminiLive = (character: Character) => {
   // Session
   const sessionRef = useRef<any>(null);
 
-  // Transcripts
-  const currentInputTransRef = useRef('');
-  const currentOutputTransRef = useRef('');
 
-  // Idle Timer
+  // Idle Timer / Manual VAD
   const lastActivityRef = useRef<number>(Date.now());
+  const vadTimeoutRef = useRef<any>(null);
+  const wasSpeakingRef = useRef<boolean>(false);
   const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Clear playback queue completely when interrupted
@@ -88,17 +84,12 @@ export const useGeminiLive = (character: Character) => {
     setIsActive(false);
     setIsSpeaking(false);
     setVolume(0);
-    setLiveInputText('');
-    setLiveOutputText('');
-    currentInputTransRef.current = '';
-    currentOutputTransRef.current = '';
   }, []);
 
   const connect = useCallback(async () => {
     try {
       setError(null);
       setIsActive(true);
-      setTranscripts([]);
 
       const apiKey = process.env.API_KEY;
       if (!apiKey) {
@@ -144,9 +135,7 @@ export const useGeminiLive = (character: Character) => {
           },
           systemInstruction: {
             parts: [{ text: character.systemPrompt }],
-          },
-          inputAudioTranscription: {},
-          outputAudioTranscription: {}
+          }
         },
       };
 
@@ -255,31 +244,7 @@ export const useGeminiLive = (character: Character) => {
             }, audioDurationMs);
           }
 
-          // Transcriptions
-          const outTrans = message.serverContent?.outputTranscription?.text;
-          const inTrans = message.serverContent?.inputTranscription?.text;
-          if (outTrans) {
-            currentOutputTransRef.current += outTrans;
-            setLiveOutputText(currentOutputTransRef.current);
-          }
-          if (inTrans) {
-            currentInputTransRef.current += inTrans;
-            setLiveInputText(currentInputTransRef.current);
-            lastActivityRef.current = Date.now();
-          }
 
-          if (message.serverContent?.turnComplete) {
-            if (currentInputTransRef.current.trim()) {
-              setTranscripts(prev => [...prev, { role: 'user', text: currentInputTransRef.current.trim() }]);
-              currentInputTransRef.current = '';
-              setLiveInputText('');
-            }
-            if (currentOutputTransRef.current.trim()) {
-              setTranscripts(prev => [...prev, { role: 'model', text: currentOutputTransRef.current.trim() }]);
-              currentOutputTransRef.current = '';
-              setLiveOutputText('');
-            }
-          }
         },
 
         onclose: () => {
@@ -308,5 +273,5 @@ export const useGeminiLive = (character: Character) => {
     return () => { disconnect(); };
   }, [disconnect]);
 
-  return { connect, disconnect, isActive, isSpeaking, volume, transcripts, liveInputText, liveOutputText, error };
+  return { connect, disconnect, isActive, isSpeaking, volume, error };
 };

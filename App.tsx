@@ -16,19 +16,8 @@ const App: React.FC = () => {
     isActive, 
     isSpeaking,
     volume,
-    transcripts,
-    liveInputText,
-    liveOutputText,
     error 
   } = useGeminiLive(selectedChar);
-
-  // Auto-scroll the transcript
-  const transcriptRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (transcriptRef.current) {
-      transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
-    }
-  }, [transcripts]);
 
   const handleStart = async () => {
     setHasStarted(true);
@@ -57,37 +46,47 @@ const App: React.FC = () => {
   // Intro Screen
   if (!hasStarted && !isActive) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-indigo-100 to-purple-200 flex flex-col items-center justify-center p-4">
-        <div className="bg-white rounded-3xl shadow-xl p-8 max-w-2xl w-full text-center border-4 border-indigo-200 relative">
-          
-          <div className="flex justify-center mb-6">
-            <div className="bg-indigo-100 p-4 rounded-full">
-              <Sparkles className="w-12 h-12 text-indigo-500 animate-pulse" />
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 relative overflow-hidden">
+        {/* Animated Background Orbs */}
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-indigo-600 rounded-full mix-blend-screen filter blur-[100px] opacity-30 animate-pulse"></div>
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-600 rounded-full mix-blend-screen filter blur-[100px] opacity-30 animate-pulse" style={{ animationDelay: '1s' }}></div>
+
+        <div className="z-10 w-full max-w-4xl text-center">
+          <div className="flex justify-center mb-4">
+            <div className="bg-white/10 backdrop-blur-md p-4 rounded-3xl inline-block border border-white/10 shadow-2xl">
+              <Sparkles className="w-10 h-10 text-indigo-300 animate-pulse" />
             </div>
           </div>
           
-          <h1 className="text-4xl font-bold text-indigo-600 mb-2">Hi Anusha!</h1>
-          <p className="text-gray-500 text-lg mb-8">Who do you want to talk to today?</p>
+          <h1 className="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 to-purple-300 mb-2 tracking-tight">
+            Hi Anusha!
+          </h1>
+          <p className="text-slate-400 text-xl mb-12 font-medium tracking-wide">Select a friend to talk to</p>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
             {CHARACTERS.map((char) => (
               <button
                 key={char.id}
                 onClick={() => handleCharacterSelect(char)}
-                className={`relative p-6 rounded-2xl transition-all duration-300 transform hover:scale-105 ${
-                  selectedChar.id === char.id 
-                    ? `bg-gradient-to-br ${char.color} shadow-lg ring-4 ring-offset-2 ring-indigo-300 text-white` 
-                    : 'bg-white border-2 border-gray-100 hover:border-indigo-200 text-gray-600'
+                className={`group relative p-8 rounded-[2rem] transition-all duration-500 transform hover:-translate-y-2 flex flex-col items-center text-center overflow-hidden
+                  ${selectedChar.id === char.id 
+                    ? `bg-gradient-to-br ${char.color} shadow-[0_0_40px_rgba(139,92,246,0.3)] border border-white/20 text-white scale-105` 
+                    : 'bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 hover:border-white/20 text-slate-300'
                 }`}
               >
-                <div className="text-5xl mb-3">{char.emoji}</div>
-                <h3 className="text-xl font-bold">{char.name}</h3>
-                <p className={`text-sm mt-2 ${selectedChar.id === char.id ? 'text-white/90' : 'text-gray-400'}`}>
+                {/* Glow behind emoji on selection */}
+                {selectedChar.id === char.id && (
+                  <div className="absolute inset-0 bg-white/20 filter blur-3xl opacity-50"></div>
+                )}
+                
+                <div className="text-6xl mb-4 relative z-10 transition-transform duration-500 group-hover:scale-110">{char.emoji}</div>
+                <h3 className="text-2xl font-bold relative z-10">{char.name}</h3>
+                <p className={`text-sm mt-3 relative z-10 font-medium ${selectedChar.id === char.id ? 'text-white/90' : 'text-slate-400'}`}>
                   {char.description}
                 </p>
                 {selectedChar.id === char.id && (
-                  <div className="absolute top-2 right-2">
-                    <Heart className="w-5 h-5 fill-current text-white" />
+                  <div className="absolute top-4 right-4 z-10 animate-pulse">
+                    <Heart className="w-6 h-6 fill-current text-white drop-shadow-md" />
                   </div>
                 )}
               </button>
@@ -96,136 +95,102 @@ const App: React.FC = () => {
 
           <button
             onClick={handleStart}
-            className="w-full md:w-auto px-12 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full text-2xl font-bold shadow-lg transition-transform transform hover:scale-105 flex items-center justify-center gap-3"
+            className="w-full md:w-auto px-16 py-5 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white rounded-full text-2xl font-bold shadow-[0_0_30px_rgba(99,102,241,0.5)] transition-all duration-300 transform hover:scale-105 hover:shadow-[0_0_50px_rgba(99,102,241,0.7)] flex items-center justify-center gap-4 mx-auto"
           >
             <Mic className="w-8 h-8" />
-            Call My Friend!
+            Start Voice Chat
           </button>
         </div>
       </div>
     );
   }
 
-  // Active Chat Screen
+  // Active Chat Screen (Immersive Live View)
   return (
-    <div className={`min-h-screen flex flex-col bg-gradient-to-br ${selectedChar.color} bg-opacity-20`}>
-      {/* Header */}
-      <header className="bg-white/80 backdrop-blur-md p-4 sticky top-0 z-10 shadow-sm safe-top">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-3xl">{selectedChar.emoji}</span>
-            <div>
-              <h1 className="text-xl font-bold text-gray-800">{selectedChar.name}</h1>
-              <div className="flex items-center gap-1">
-                <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-green-500 animate-pulse' : 'bg-red-400'}`}></span>
-                <span className="text-xs text-gray-500">{isActive ? 'Online' : 'Disconnected'}</span>
-              </div>
+    <div className={`min-h-screen flex flex-col bg-slate-950 text-white overflow-hidden relative transition-colors duration-1000`}>
+      
+      {/* Dynamic Background Glow based on Character Color */}
+      <div className={`absolute inset-0 opacity-20 bg-gradient-to-b ${selectedChar.color}`}></div>
+      {isSpeaking && (
+        <div className={`absolute inset-0 opacity-40 bg-gradient-to-t ${selectedChar.color} animate-pulse duration-[3000ms]`}></div>
+      )}
+
+      {/* Floating Header */}
+      <header className="p-6 relative z-10 flex justify-between items-center w-full max-w-5xl mx-auto">
+        <div className="flex items-center gap-4 bg-white/10 backdrop-blur-xl px-5 py-3 rounded-full border border-white/10 shadow-xl">
+          <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center text-2xl shadow-inner">
+            {selectedChar.emoji}
+          </div>
+          <div>
+            <h1 className="text-lg font-bold tracking-wide">{selectedChar.name}</h1>
+            <div className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${isActive ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)]' : 'bg-rose-500'}`}></span>
+              <span className="text-xs font-semibold tracking-wider text-slate-300 uppercase">{isActive ? 'Live' : 'Offline'}</span>
             </div>
           </div>
-          <button 
-            onClick={handleStop}
-            className="bg-red-100 hover:bg-red-200 text-red-600 px-4 py-2 rounded-full font-semibold transition-colors flex items-center gap-2"
-          >
-            <MicOff className="w-4 h-4" /> Say Bye Bye
-          </button>
         </div>
+        
+        <button 
+          onClick={handleStop}
+          className="bg-rose-500/20 hover:bg-rose-500/40 backdrop-blur-md text-rose-300 border border-rose-500/30 px-6 py-3 rounded-full font-bold transition-all duration-300 flex items-center gap-3 shadow-lg hover:shadow-rose-500/20"
+        >
+          <MicOff className="w-5 h-5" /> End Call
+        </button>
       </header>
 
-      <main className="flex-1 flex flex-col max-w-4xl mx-auto w-full p-4 gap-4 pb-safe">
+      <main className="flex-1 flex flex-col items-center justify-center w-full relative z-10">
         
-        {/* Main Visualizer Area */}
-        <div className="flex-1 bg-white/60 backdrop-blur-sm rounded-3xl p-6 flex flex-col items-center justify-center relative overflow-hidden shadow-inner min-h-[300px]">
-          
-          {/* Status Text */}
-          <div className="absolute top-6 font-medium text-indigo-800 bg-white/80 px-4 py-1 rounded-full shadow-sm">
-            {isSpeaking ? (
-              <span className="flex items-center gap-2">
-                <Volume2 className="w-4 h-4 animate-pulse" /> {selectedChar.name} is speaking...
-              </span>
-            ) : (
-              <span className="flex items-center gap-2">
-                 Listening to Anusha...
-              </span>
-            )}
-          </div>
-
-          {/* Avatar Animation */}
-          <div className={`transition-transform duration-500 ${isSpeaking ? 'scale-110' : 'scale-100'}`}>
-             <div className="text-[120px] animate-float drop-shadow-2xl filter">{selectedChar.emoji}</div>
-          </div>
-
-          {/* Audio Visualizer */}
-          <div className="w-full h-32 mt-8 flex items-center justify-center">
-             <AudioVisualizer isActive={isActive} isSpeaking={isSpeaking} volume={volume} color={selectedChar.baseColorHex} />
-          </div>
-
-          {error && (
-            <div className="absolute bottom-4 bg-red-100 text-red-800 px-4 py-2 rounded-lg text-sm text-center max-w-md">
-              {error}
-            </div>
+        {/* Status Indicator */}
+        <div className="absolute top-10 font-bold text-slate-300 bg-white/5 backdrop-blur-sm px-6 py-2 rounded-full border border-white/5 tracking-widest text-sm uppercase">
+          {isSpeaking ? (
+            <span className="flex items-center gap-3 text-indigo-300">
+              <Volume2 className="w-4 h-4 animate-pulse" /> Speaking...
+            </span>
+          ) : (
+            <span className="flex items-center gap-3 text-emerald-300">
+              <Mic className="w-4 h-4 animate-pulse" /> Listening...
+            </span>
           )}
         </div>
 
-        {/* Conversation Ideas & Transcript */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-64">
+        {/* Immersive Avatar */}
+        <div className="relative flex items-center justify-center">
+          {/* Audio Reactivity Aura */}
+          <div className={`absolute w-[300px] h-[300px] rounded-full bg-gradient-to-r ${selectedChar.color} filter blur-[80px] transition-opacity duration-300 ${isSpeaking ? 'opacity-80' : 'opacity-20'}`}></div>
           
-          {/* Ice Breakers */}
-          <div className="bg-white rounded-3xl p-5 shadow-sm border border-indigo-50 flex flex-col">
-            <h3 className="font-bold text-gray-700 flex items-center gap-2 mb-3">
-              <Star className="w-5 h-5 text-yellow-500 fill-current" />
-              What can I say?
-            </h3>
-            <div className="flex-1 overflow-y-auto space-y-2 pr-2">
-               {TOPICS.map((topic, idx) => (
-                 <div key={idx} className="bg-indigo-50 hover:bg-indigo-100 p-3 rounded-xl cursor-pointer transition-colors text-indigo-800 text-sm font-medium">
-                   "{topic}"
-                 </div>
-               ))}
-            </div>
-          </div>
-
-          {/* Live Transcript */}
-          <div className="bg-white rounded-3xl p-5 shadow-sm border border-indigo-50 flex flex-col">
-             <h3 className="font-bold text-gray-700 flex items-center gap-2 mb-3">
-              <MessageCircle className="w-5 h-5 text-blue-500" />
-              Our Chat
-            </h3>
-            <div ref={transcriptRef} className="flex-1 overflow-y-auto space-y-3 pr-2 scroll-smooth">
-               {transcripts.length === 0 ? (
-                 <p className="text-gray-400 text-center italic mt-10">Say "Hello!" to start...</p>
-               ) : (
-                 transcripts.map((t, i) => (
-                   <div key={i} className={`flex ${t.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                     <div className={`max-w-[85%] px-4 py-2 rounded-2xl text-sm ${
-                       t.role === 'user' 
-                       ? 'bg-indigo-500 text-white rounded-tr-none' 
-                       : 'bg-gray-100 text-gray-800 rounded-tl-none'
-                     }`}>
-                       {t.text}
-                     </div>
-                   </div>
-                 ))
-               )}
-               {/* Live User Transcript */}
-               {liveInputText && (
-                 <div className="flex justify-end">
-                   <div className="max-w-[85%] px-4 py-2 rounded-2xl text-sm bg-indigo-400 text-white rounded-tr-none opacity-80 animate-pulse">
-                     {liveInputText}
-                   </div>
-                 </div>
-               )}
-               {/* Live Model Transcript */}
-               {liveOutputText && (
-                 <div className="flex justify-start">
-                   <div className="max-w-[85%] px-4 py-2 rounded-2xl text-sm bg-gray-100 text-gray-800 rounded-tl-none opacity-80">
-                     {liveOutputText}
-                   </div>
-                 </div>
-               )}
-            </div>
+          <div className={`text-[150px] relative z-10 transition-transform duration-500 drop-shadow-2xl ${isSpeaking ? 'scale-110 animate-float' : 'scale-100'}`}>
+            {selectedChar.emoji}
           </div>
         </div>
+
+        {/* Error Notification */}
+        {error && (
+          <div className="absolute bottom-40 bg-rose-500/90 backdrop-blur-md text-white px-6 py-3 rounded-2xl text-sm font-semibold max-w-md shadow-2xl flex items-center gap-3 border border-rose-400/50">
+            <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+            {error}
+          </div>
+        )}
       </main>
+
+      {/* Floating Bottom Audio Visualizer & Ideas Drawer */}
+      <div className="w-full relative z-20 pb-8 pt-4 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent">
+        
+        {/* Suggestion Chips (Minimal) */}
+        <div className="flex justify-center mb-6 px-4">
+          <div className="flex flex-wrap justify-center gap-3 max-w-3xl">
+             {TOPICS.map((topic, idx) => (
+               <div key={idx} className="bg-white/5 hover:bg-white/15 border border-white/10 backdrop-blur-md px-5 py-2 rounded-full cursor-pointer transition-all duration-300 text-slate-300 text-xs font-semibold tracking-wide hover:-translate-y-1 hover:shadow-lg hover:shadow-white/5">
+                 {topic}
+               </div>
+             ))}
+          </div>
+        </div>
+
+        {/* Edge to Edge Visualizer */}
+        <div className="w-full h-24 flex items-center justify-center opacity-80 mix-blend-screen px-10">
+           <AudioVisualizer isActive={isActive} isSpeaking={isSpeaking} volume={volume} color={selectedChar.baseColorHex} />
+        </div>
+      </div>
     </div>
   );
 };

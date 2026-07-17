@@ -3,7 +3,7 @@ import { useGeminiLive } from './hooks/useGeminiLive';
 import { Character } from './types';
 import { CHARACTERS, TOPICS } from './constants';
 import { AudioVisualizer } from './components/Visualizer';
-import { Mic, MicOff, Volume2, Sparkles, MessageCircle, Heart, Star } from 'lucide-react';
+import { Mic, MicOff, Volume2, Sparkles, MessageCircle, Heart, Star, StopCircle } from 'lucide-react';
 
 const App: React.FC = () => {
   const [selectedChar, setSelectedChar] = useState<Character>(CHARACTERS[0]);
@@ -16,7 +16,10 @@ const App: React.FC = () => {
     isActive, 
     isSpeaking,
     volume,
-    error 
+    error,
+    isMuted,
+    toggleMute,
+    interrupt
   } = useGeminiLive(selectedChar);
 
   const handleStart = async () => {
@@ -130,12 +133,38 @@ const App: React.FC = () => {
           </div>
         </div>
         
-        <button 
-          onClick={handleStop}
-          className="bg-rose-500/20 hover:bg-rose-500/40 backdrop-blur-md text-rose-300 border border-rose-500/30 px-6 py-3 rounded-full font-bold transition-all duration-300 flex items-center gap-3 shadow-lg hover:shadow-rose-500/20"
-        >
-          <MicOff className="w-5 h-5" /> End Call
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Interrupt Button - Only show when model is speaking */}
+          {isSpeaking && (
+            <button 
+              onClick={interrupt}
+              className="bg-amber-500/20 hover:bg-amber-500/40 backdrop-blur-md text-amber-300 border border-amber-500/30 px-4 py-3 rounded-full font-bold transition-all duration-300 flex items-center gap-2 shadow-lg"
+              title="Stop current response"
+            >
+              <StopCircle className="w-5 h-5" /> Interrupt
+            </button>
+          )}
+
+          {/* Mute Button */}
+          <button 
+            onClick={toggleMute}
+            className={`backdrop-blur-md px-4 py-3 rounded-full font-bold transition-all duration-300 flex items-center gap-2 shadow-lg ${
+              isMuted 
+                ? 'bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 border border-rose-500/30' 
+                : 'bg-white/10 hover:bg-white/20 text-slate-300 border border-white/10'
+            }`}
+          >
+            {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />} 
+            {isMuted ? 'Muted' : 'Mute'}
+          </button>
+
+          <button 
+            onClick={handleStop}
+            className="bg-rose-500/20 hover:bg-rose-500/40 backdrop-blur-md text-rose-300 border border-rose-500/30 px-6 py-3 rounded-full font-bold transition-all duration-300 flex items-center gap-3 shadow-lg hover:shadow-rose-500/20"
+          >
+             End Call
+          </button>
+        </div>
       </header>
 
       <main className="flex-1 flex flex-col items-center justify-center w-full relative z-10">
